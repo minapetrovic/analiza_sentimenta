@@ -1,13 +1,8 @@
 #install.packages("tm")
 #install.packages("tidyr") #koriscena fja unite
-#install.packages("qdap") #koriscena fja za najfrekventnije termine
-#install.packages("RWeka")
 library(tm)
 library(tidyr)
 library(ggplot2)
-library(corrplot)
-library(qdap)
-library(RWeka)
 
 #Ucitavanje dataseta
 ecommerce_reviews <- read.csv("e-commerce_reviews.csv", stringsAsFactors = FALSE)
@@ -47,10 +42,7 @@ ecommerce_reviews <- unite(ecommerce_reviews, "Review", c("Title","Review.Text")
 #da bismo oznacili komentare kao pozitivne/negativne, uzimamo u obzir preostale 2 varijable
 #(Rating i Recommended.IND)
 corr.matrix <- cor(ecommerce_reviews[-1])
-#corrplot(corr.matrix, method = "number", type = "upper", diag = F, number.cex = 3.5, tl.cex = 1, tl.srt=0,  tl.col="black")
-# Nikola: nema potrebe ovo crtati, racunate korelaciju izmedju dve varijable samo 
 
-#sa grafika vidimo da je koef. korelacije 0.79, sto se smatra jakom korelacijom
 #(kako raste Rating (ka oceni 5), tako Recommended.IND naginje vise ka 1 (dakle da osoba preporucuje proizvod))
 #Na osnovu ovoga, moze se uzeti Rating kao osnova za oznacavanje podataka.
 
@@ -86,9 +78,6 @@ prop.table(table(ecommerce_reviews$Label))
 #KREIRANJE KORPUSA
 ##################################
 corpus_review <- VCorpus(VectorSource(ecommerce_reviews$Review))
-#Proba sa VCorpus
-#corpus_review <- VCorpus(VectorSource(ecommerce_reviews))
-inspect(corpus_review)
 
 #detalji o 123. dokumentu
 inspect(corpus_review[123])
@@ -100,21 +89,6 @@ corpus_review <- tm_map(corpus_review, content_transformer(tolower))
 
 # 2. Uklanjanje stopwords-a iz tm-ove liste stopwords-a
 corpus_review <- tm_map(corpus_review, removeWords, stopwords("english"))
-
-#Da li ukloniti jos neke reci? Proverimo opet najfrekventnije reci u korpusu
-#freq.terms <- freq_terms(corpus_review, 20)
-#plot(freq.terms)
-#Mina: koriscenjem VCorpus-a, reci koje su verovatno meta podaci nekako ulaze u razmatranje ovde.
-#Da li onda samo ukloniti ove reci vidljive sa grafika(character, year,...,listsec)?
-#corpus_review <- tm_map(corpus_review, removeWords, freq.terms$WORD)
-
-#Opet najfrekventnije reci
-#freq.terms <- freq_terms(corpus_review, 20)
-#plot(freq.terms)
-#Mozemo videti da su se reci izmenile - sada su to reci poput: dress, love, size, great, top, fit itd.
-#Uklonicemo top3 reci: dress, love i size, jer njihova frekventnost ne utice na prediktivnost sentimenta
-#corpus_review <- tm_map(corpus_review, removeWords, c("dress","love","size"))
-
 
 # 3. Uklanjanje brojeva
 corpus_review <- tm_map(corpus_review, removeNumbers)
@@ -131,54 +105,6 @@ corpus_review <- tm_map(corpus_review, stripWhitespace)
 #install.packages('SnowballC')
 library(SnowballC)
 corpus_review <- tm_map(corpus_review , stemDocument, language = "english")
-
-#Kreiranje DTM matrice (po defaultu su ovo unigrami)
-#dtm <- DocumentTermMatrix(corpus_review)
-#inspect(dtm)
-
-#dtm.trimmed <- removeSparseTerms(dtm, sparse = 0.9875)
-#inspect(dtm.trimmed)
-
-#Racunamo frekvencije termina iz DTM
-#freq <- colSums(as.matrix(dtm))
-
-#duzina = koliko termina (unigrama) imamo u DTM
-#length(freq)
-#Mina: da li ipak treba ovo, posto smo umanjili sparsity matrice dtm i napravili novu matricu dtm.trimmed?
-#length(colSums(as.matrix(dtm.trimmed)))
-
-#Sortiranje frekvencija termina opadajuce 
-#ord <- order(freq, decreasing=TRUE)
-
-#Najcesci termini
-#freq[head(ord)]
-#Najredji termini
-#freq[tail(ord)]
-
-#Kreiramo TF-IDF matricu
-#dtm.tfidf <- DocumentTermMatrix(corpus_review, control = list(weighting = weightTfIdf))
-#dtm.tfidf <- removeSparseTerms(dtm.tfidf, 0.9999)
-#rowTotals <- slam::row_sums(dtm.tfidf)
-#dtm.tfidf <- dtm.tfidf[rowTotals > 0, ]
-#inspect(dtm.tfidf)
-
-#Kreiranje bigrama
-#BigramTokenizer <- function(x) unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
-#dtm.bigram <- TermDocumentMatrix(corpus_review, control = list(tokenize = BigramTokenizer))
-#inspect(dtm.bigram)
-
-#Mina: Prijavljuje mi ovo kao gresku prilikom kreiranja bigrama:
-# Error in names(out) <- grouping : 
-#'names' attribute [1] must be the same length as the vector [0] 
-
-#Kreiranje trigrama
-#TrigramTokenizer <- function(x) { unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)}
-#dtm.trigram <- DocumentTermMatrix(corpus_review, control = list(tokenize = TrigramTokenizer))
-#inspect(dtm.trigram)
-#Mina: Prijavljuje mi ovo kao gresku prilikom kreiranja trigrama:
-# Error in names(out) <- grouping : 
-#'names' attribute [1] must be the same length as the vector [0]
-
 
 #####################################################
 #KREIRANJE DTM, TF-IDF za unigrame, bigrame, trigrame
@@ -222,8 +148,8 @@ dim(review.tokens.dfm.tfidf)
 total.tfidf.scores.unigram <- as.vector(colSums(review.tokens.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.unigram, 0.75)
-percentil90 <- quantile(total.tfidf.scores.unigram, 0.9)
+percentil75 <- quantile(total.tfidf.scores.unigram, 0.97) #proba sa 97. percentilom
+percentil90 <- quantile(total.tfidf.scores.unigram, 0.99) #proba sa 99. percentilom
 
 review.tokens.dfm.tfidf.df <- convert(review.tokens.dfm.tfidf, to="data.frame")
 review.tokens.dfm.tfidf.df <- cbind(Label = ecommerce_reviews$Label,review.tokens.dfm.tfidf.df)
@@ -265,27 +191,26 @@ dim(review.bigrams.dfm.tfidf)
 total.tfidf.scores.bigram <- as.vector(colSums(review.bigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.bigram, 0.75)
-percentil90 <- quantile(total.tfidf.scores.bigram, 0.9)
+percentil75 <- quantile(total.tfidf.scores.bigram, 0.97) #proba sa 97. percentilom
+percentil90 <- quantile(total.tfidf.scores.bigram, 0.99) #proba sa 99. percentilom
 
 #BIGRAMI sa total TF-IDF skorom > 75 percentila
 bigram.index.removals.75 <- which(total.tfidf.scores.bigram < percentil75)
 bigrams.tfidf.75 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.75],
                                selection = "remove")
-bigrams.tfidf.75 <- convert(bigrams.tfidf.75, to = "data.frame") #Ne moze da se pretvori u dataframe,
-#out of memory greska
-#Da li ovde primeniti smanjenje tfidf na osnovu praga za sparsity?
-#glavni problem: ne mogu da oznacim dokumenta onda
+bigrams.tfidf.75 <- convert(bigrams.tfidf.75, to = "data.frame") #uspesno sa 97.percentilom
+#Dodajemo labelu 
+bigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label, bigrams.tfidf.75)
+bigrams.tfidf.75[1:5,1:5]
 
 #BIGRAMI sa total TF-IDF skorom > 90 percentila
 bigram.index.removals.90 <- which(total.tfidf.scores.bigram < percentil90)
 bigrams.tfidf.90 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.90],
                                selection = "remove")
-bigrams.tfidf.90 <- convert(bigrams.tfidf.90, to = "data.frame") #Error: cannot allocate vector of size 3.2 Gb
-#Ne moze da se pretvori u dataframe,
-#Da li i ovde primeniti smanjenje tfidf na osnovu praga za sparsity?
-#glavni problem: ne mogu da oznacim dokumenta onda
-
+bigrams.tfidf.90 <- convert(bigrams.tfidf.90, to = "data.frame") #uspesno sa 99. percentilom
+#Dodajemo labelu 
+bigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label, bigrams.tfidf.90)
+bigrams.tfidf.90[1:5,1:5]
 
 
 ##############################
@@ -313,29 +238,22 @@ dim(review.trigrams.dfm.tfidf)
 total.tfidf.scores.trigram <- as.vector(colSums(review.trigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.trigram, 0.75)
-percentil90 <- quantile(total.tfidf.scores.trigram, 0.9)
+percentil75 <- quantile(total.tfidf.scores.trigram, 0.97) #proba sa 97. percentilom
+percentil90 <- quantile(total.tfidf.scores.trigram, 0.99) #proba sa 99. percentilom
 
 #TRIGRAMI sa total TF-IDF skorom > 75 percentila
 trigram.index.removals.75 <- which(total.tfidf.scores.trigram < percentil75)
 trigrams.tfidf.75 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.75],
                                selection = "remove")
 
-trigrams.tfidf.75 <- convert(trigrams.tfidf.75, to = "data.frame") #Ne moze da se pretvori u dataframe,
-#"problem too large" greska
-#Da li ovde primeniti smanjenje tfidf na osnovu praga za sparsity?
-#glavni problem: ne mogu da oznacim dokumenta onda
+trigrams.tfidf.75 <- convert(trigrams.tfidf.75, to = "data.frame") #uspesno sa 97. percentilom
 
 #TRIGRAMI sa total TF-IDF skorom > 90 percentila
 trigram.index.removals.90 <- which(total.tfidf.scores.trigram < percentil90)
 trigrams.tfidf.90 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.90],
                                selection = "remove")
 
-bigrams.tfidf.90 <- convert(bigrams.tfidf.90, to = "data.frame") #Error: cannot allocate vector of size 3.2 Gb
-#Ne moze da se pretvori u dataframe,
-#Da li i ovde primeniti smanjenje tfidf na osnovu praga za sparsity?
-#glavni problem: ne mogu da oznacim dokumenta onda
-
+trigrams.tfidf.90 <- convert(trigrams.tfidf.90, to = "data.frame") #uspesno sa 99. percentilom
 
 
 
@@ -345,50 +263,256 @@ library(caret) # for model-building
 library(DMwR) # for smote implementation
 library(purrr) # for functional programming (map)
 library(pROC) # for AUC calculations
-###################################################################
-# KONFIGURACIJA 1
-###################################################################
+
+########################################################################
+# KONFIGURACIJA 1 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
 
 set.seed(1010)
 train.indexes <- createDataPartition(unigrams.tfidf.75$Label, p = .80, list = FALSE)
-train1a <- unigrams.tfidf.75[train.indexes,]
-test1a <- unigrams.tfidf.75[-train.indexes,]
-prop.table(table(test1a$Label))
+train1 <- unigrams.tfidf.75[train.indexes,]
+test1 <- unigrams.tfidf.75[-train.indexes,]
+prop.table(table(test1$Label))
 
-# Podkonfiguracija A 
 # Kontrolna funkcija za 10fold cross-validation
-install.packages("LiblineaR")
-library(LiblineaR)
+#install.packages("doSNOW")
+library(e1071)
+library(doSNOW)
+
+
 ctrl <- trainControl(method = "repeatedcv",
                      number = 10,
-                     repeats = 5,
+                     repeats = 2,
+                     verboseIter = TRUE,
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 
-# Build a standard classifier using a gradient boosted machine
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
 
 set.seed(5627)
 
 orig_fit <- train(Label ~ .,
-                  data = train1a,
-                  method = "svmRadialWeights",
+                  data = train1,
+                  method = "svmLinear2",
                   verbose = FALSE,
+                  preProcess = c("center", "scale"),
                   metric = "ROC",
                   trControl = ctrl)
-################################################
-#ovde sam stala, jer je trening run-ovalo preko 6h, dakle mora da se redukuje dataset
-################################################
+#Ovde daje warning da dosta varijabli ima zero variance. 
+
+total.time <- Sys.time() - start.time
+total.time
+
 # Build custom AUC function to extract AUC
 # from the caret model object
 
-#test_roc <- function(model, data) {
+test_roc <- function(model, data) {
   
-#  roc(data$Label,
-#      predict(model, data, type = "prob")[, "NEG"])
+  roc(data$Label,
+      predict(model, data, type = "prob")[, "NEG"])
   
-#}
+}
 
-#orig_fit %>%
-#  test_roc(data = test1a) %>%
-#  auc()
+orig_fit %>%
+  test_roc(data = test1) %>%
+  auc()
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl$seeds <- orig_fit$control$seeds
+
+# Build down-sampled model
+
+ctrl$sampling <- "down"
+
+down_fit <- train(Label ~ .,
+                  data = train1,
+                  method = "svmLinear2",
+                  verbose = FALSE,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl)
+
+
+# Build smote model
+
+ctrl$sampling <- "smote"
+
+smote_fit <- train(Label ~ .,
+                   data = train1,
+                   method = "svmLinear2",
+                   verbose = FALSE,    
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Examine results for test set
+
+model_list <- list(original = orig_fit,
+                   down = down_fit,
+                   SMOTE = smote_fit)
+
+model_list_roc <- model_list %>%
+  map(test_roc, data = test1)
+
+model_list_roc %>%
+  map(auc)
+
+
+########################################################################
+# KONFIGURACIJA 2 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
+
+set.seed(1010)
+train2.indexes <- createDataPartition(bigrams.tfidf.75$Label, p = .80, list = FALSE)
+train2 <- bigrams.tfidf.75[train2.indexes,]
+test2 <- bigrams.tfidf.75[-train2.indexes,]
+prop.table(table(test2$Label))
+
+# Kontrolna funkcija za 10fold cross-validation
+ctrl2 <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 2,
+                     verboseIter = TRUE,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
+
+set.seed(1010)
+
+orig_fit2 <- train(Label ~ .,
+                  data = train2,
+                  method = "svmLinear2",
+                  verbose = FALSE,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl2)
+
+total.time <- Sys.time() - start.time
+total.time
+
+orig_fit2 %>%
+  test_roc(data = test2) %>%
+  auc()
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl2$seeds <- orig_fit2$control$seeds
+
+# Build down-sampled model
+
+ctrl2$sampling <- "down"
+
+down_fit2 <- train(Label ~ .,
+                  data = train2,
+                  method = "svmLinear2",
+                  verbose = FALSE,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl2)
+
+
+# Build smote model
+
+ctrl2$sampling <- "smote"
+
+smote_fit2 <- train(Label ~ .,
+                   data = train2,
+                   method = "svmLinear2",
+                   verbose = FALSE,    
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl2)
+
+# Examine results for test set
+
+model_list2 <- list(original = orig_fit2,
+                   down = down_fit2,
+                   SMOTE = smote_fit2)
+
+model_list_roc2 <- model_list2 %>%
+  map(test_roc, data = test2)
+
+model_list_roc2 %>%
+  map(auc)
+
+
+########################################################################
+# KONFIGURACIJA 3 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
+
+set.seed(1234)
+train3.indexes <- createDataPartition(trigrams.tfidf.75$Label, p = .80, list = FALSE)
+train3 <- trigrams.tfidf.75[train3.indexes,]
+test3 <- trigrams.tfidf.75[-train3.indexes,]
+prop.table(table(test3$Label))
+
+# Kontrolna funkcija za 10fold cross-validation
+ctrl3 <- trainControl(method = "repeatedcv",
+                      number = 10,
+                      repeats = 2,
+                      verboseIter = TRUE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
+
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
+
+set.seed(1001)
+
+orig_fit3 <- train(Label ~ .,
+                   data = train3,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl3)
+
+total.time <- Sys.time() - start.time
+total.time
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl3$seeds <- orig_fit3$control$seeds
+
+# Build down-sampled model
+
+ctrl3$sampling <- "down"
+
+down_fit3 <- train(Label ~ .,
+                   data = train3,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl3)
+
+
+# Build smote model
+
+ctrl3$sampling <- "smote"
+
+smote_fit3 <- train(Label ~ .,
+                    data = train3,
+                    method = "svmLinear2",
+                    verbose = FALSE,    
+                    preProcess = c("center", "scale"),
+                    metric = "ROC",
+                    trControl = ctrl3)
+
+# Examine results for test set
+
+model_list3 <- list(original = orig_fit3,
+                    down = down_fit3,
+                    SMOTE = smote_fit3)
+
+model_list_roc3 <- model_list3 %>%
+  map(test_roc, data = test3)
+
+model_list_roc3 %>%
+  map(auc)
+
 

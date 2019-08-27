@@ -164,6 +164,8 @@ unigrams.tfidf.75 <- review.tokens.dfm.tfidf.df[,-unigram.index.removals.75]
 unigram.index.removals.90 <- which(total.tfidf.scores.unigram < percentil90)+2 #dodajem +2 zbog prve dve nove kolone
 unigrams.tfidf.90 <- review.tokens.dfm.tfidf.df[,-unigram.index.removals.90]
 
+unigrams.tfidf.90[1:5,1:5]
+unigrams.tfidf.75[1:5,1:5]
 
 
 ##############################
@@ -247,6 +249,9 @@ trigrams.tfidf.75 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(re
                                selection = "remove")
 
 trigrams.tfidf.75 <- convert(trigrams.tfidf.75, to = "data.frame") #uspesno sa 97. percentilom
+#Dodajemo labelu 
+trigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label, trigrams.tfidf.75)
+trigrams.tfidf.75[1:5,1:5]
 
 #TRIGRAMI sa total TF-IDF skorom > 90 percentila
 trigram.index.removals.90 <- which(total.tfidf.scores.trigram < percentil90)
@@ -254,6 +259,9 @@ trigrams.tfidf.90 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(re
                                selection = "remove")
 
 trigrams.tfidf.90 <- convert(trigrams.tfidf.90, to = "data.frame") #uspesno sa 99. percentilom
+#Dodajemo labelu 
+trigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label, trigrams.tfidf.90)
+trigrams.tfidf.90[1:5,1:5]
 
 
 
@@ -372,11 +380,11 @@ prop.table(table(test2$Label))
 
 # Kontrolna funkcija za 10fold cross-validation
 ctrl2 <- trainControl(method = "repeatedcv",
-                     number = 10,
-                     repeats = 2,
-                     verboseIter = TRUE,
-                     summaryFunction = twoClassSummary,
-                     classProbs = TRUE)
+                      number = 10,
+                      repeats = 2,
+                      verboseIter = TRUE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
 
 # Treniramo trening set koriscenjem SVM Linear kernel metode
 start.time <- Sys.time()
@@ -384,12 +392,12 @@ start.time <- Sys.time()
 set.seed(1010)
 
 orig_fit2 <- train(Label ~ .,
-                  data = train2,
-                  method = "svmLinear2",
-                  verbose = FALSE,
-                  preProcess = c("center", "scale"),
-                  metric = "ROC",
-                  trControl = ctrl2)
+                   data = train2,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl2)
 
 total.time <- Sys.time() - start.time
 total.time
@@ -407,12 +415,12 @@ ctrl2$seeds <- orig_fit2$control$seeds
 ctrl2$sampling <- "down"
 
 down_fit2 <- train(Label ~ .,
-                  data = train2,
-                  method = "svmLinear2",
-                  verbose = FALSE,
-                  preProcess = c("center", "scale"),
-                  metric = "ROC",
-                  trControl = ctrl2)
+                   data = train2,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl2)
 
 
 # Build smote model
@@ -420,18 +428,18 @@ down_fit2 <- train(Label ~ .,
 ctrl2$sampling <- "smote"
 
 smote_fit2 <- train(Label ~ .,
-                   data = train2,
-                   method = "svmLinear2",
-                   verbose = FALSE,    
-                   preProcess = c("center", "scale"),
-                   metric = "ROC",
-                   trControl = ctrl2)
+                    data = train2,
+                    method = "svmLinear2",
+                    verbose = FALSE,    
+                    preProcess = c("center", "scale"),
+                    metric = "ROC",
+                    trControl = ctrl2)
 
 # Examine results for test set
 
 model_list2 <- list(original = orig_fit2,
-                   down = down_fit2,
-                   SMOTE = smote_fit2)
+                    down = down_fit2,
+                    SMOTE = smote_fit2)
 
 model_list_roc2 <- model_list2 %>%
   map(test_roc, data = test2)
@@ -513,6 +521,250 @@ model_list_roc3 <- model_list3 %>%
   map(test_roc, data = test3)
 
 model_list_roc3 %>%
+  map(auc)
+
+
+########################################################################
+# KONFIGURACIJA 4 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
+
+set.seed(1010)
+train.indexes4 <- createDataPartition(unigrams.tfidf.90$Label, p = .80, list = FALSE)
+train4 <- unigrams.tfidf.90[train.indexes4,]
+test4 <- unigrams.tfidf.90[-train.indexes4,]
+prop.table(table(test4$Label))
+
+# Kontrolna funkcija za 10fold cross-validation
+#install.packages("doSNOW")
+library(e1071)
+library(doSNOW)
+
+
+ctrl4 <- trainControl(method = "repeatedcv",
+                     number = 10,
+                     repeats = 2,
+                     verboseIter = TRUE,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
+
+set.seed(5627)
+
+orig_fit4 <- train(Label ~ .,
+                  data = train4,
+                  method = "svmLinear2",
+                  verbose = FALSE,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl4)
+
+total.time <- Sys.time() - start.time
+total.time
+
+# Build custom AUC function to extract AUC
+# from the caret model object
+
+orig_fit4 %>%
+  test_roc(data = test4) %>%
+  auc()
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl4$seeds <- orig_fit4$control$seeds
+
+# Build down-sampled model
+
+ctrl4$sampling <- "down"
+
+down_fit4 <- train(Label ~ .,
+                  data = train4,
+                  method = "svmLinear2",
+                  verbose = FALSE,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = ctrl4)
+
+
+# Build smote model
+
+ctrl4$sampling <- "smote"
+
+smote_fit4 <- train(Label ~ .,
+                   data = train4,
+                   method = "svmLinear2",
+                   verbose = FALSE,    
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl4)
+
+# Examine results for test set
+
+model_list4 <- list(original = orig_fit4,
+                   down = down_fit4,
+                   SMOTE = smote_fit4)
+
+model_list_roc4 <- model_list4 %>%
+  map(test_roc, data = test4)
+
+model_list_roc4 %>%
+  map(auc)
+
+
+########################################################################
+# KONFIGURACIJA 5 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
+
+set.seed(1010)
+train5.indexes <- createDataPartition(bigrams.tfidf.90$Label, p = .80, list = FALSE)
+train5 <- bigrams.tfidf.90[train5.indexes,]
+test5 <- bigrams.tfidf.90[-train5.indexes,]
+prop.table(table(test5$Label))
+
+# Kontrolna funkcija za 10fold cross-validation
+ctrl5 <- trainControl(method = "repeatedcv",
+                      number = 10,
+                      repeats = 2,
+                      verboseIter = TRUE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
+
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
+
+set.seed(1010)
+
+orig_fit5 <- train(Label ~ .,
+                   data = train5,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl5)
+
+total.time <- Sys.time() - start.time
+total.time
+
+orig_fit5 %>%
+  test_roc(data = test5) %>%
+  auc()
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl5$seeds <- orig_fit5$control$seeds
+
+# Build down-sampled model
+
+ctrl5$sampling <- "down"
+
+down_fit5 <- train(Label ~ .,
+                   data = train5,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl5)
+
+
+# Build smote model
+
+ctrl5$sampling <- "smote"
+
+smote_fit5 <- train(Label ~ .,
+                    data = train5,
+                    method = "svmLinear2",
+                    verbose = FALSE,    
+                    preProcess = c("center", "scale"),
+                    metric = "ROC",
+                    trControl = ctrl5)
+
+# Examine results for test set
+
+model_list5 <- list(original = orig_fit5,
+                    down = down_fit5,
+                    SMOTE = smote_fit5)
+
+model_list_roc5 <- model_list5 %>%
+  map(test_roc, data = test5)
+
+model_list_roc5 %>%
+  map(auc)
+
+
+########################################################################
+# KONFIGURACIJA 6 sa podkonfiguracijama original, down-sampling i SMOTE 
+########################################################################
+
+set.seed(1234)
+train6.indexes <- createDataPartition(trigrams.tfidf.90$Label, p = .80, list = FALSE)
+train6 <- trigrams.tfidf.90[train6.indexes,]
+test6 <- trigrams.tfidf.90[-train6.indexes,]
+prop.table(table(test6$Label))
+
+# Kontrolna funkcija za 10fold cross-validation
+ctrl6 <- trainControl(method = "repeatedcv",
+                      number = 10,
+                      repeats = 2,
+                      verboseIter = TRUE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
+
+# Treniramo trening set koriscenjem SVM Linear kernel metode
+start.time <- Sys.time()
+
+set.seed(1001)
+
+orig_fit6 <- train(Label ~ .,
+                   data = train6,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl6)
+
+total.time <- Sys.time() - start.time
+total.time
+
+# Use the same seed to ensure same cross-validation splits
+
+ctrl6$seeds <- orig_fit6$control$seeds
+
+# Build down-sampled model
+
+ctrl6$sampling <- "down"
+
+down_fit6 <- train(Label ~ .,
+                   data = train6,
+                   method = "svmLinear2",
+                   verbose = FALSE,
+                   preProcess = c("center", "scale"),
+                   metric = "ROC",
+                   trControl = ctrl6)
+
+
+# Build smote model
+
+ctrl6$sampling <- "smote"
+
+smote_fit6 <- train(Label ~ .,
+                    data = train6,
+                    method = "svmLinear2",
+                    verbose = FALSE,    
+                    preProcess = c("center", "scale"),
+                    metric = "ROC",
+                    trControl = ctrl6)
+
+# Examine results for test set
+
+model_list6 <- list(original = orig_fit6,
+                    down = down_fit6,
+                    SMOTE = smote_fit6)
+
+model_list_roc6 <- model_list6 %>%
+  map(test_roc, data = test6)
+
+model_list_roc6 %>%
   map(auc)
 
 

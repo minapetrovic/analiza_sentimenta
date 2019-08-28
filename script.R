@@ -113,7 +113,6 @@ corpus_review <- tm_map(corpus_review , stemDocument, language = "english")
 library(quanteda)
 if (requireNamespace("tm", quietly = TRUE)) {
   qCorpus <- corpus(corpus_review)
-  summary(qCorpus, showmeta=TRUE)
 }
 
 
@@ -126,7 +125,6 @@ review.tokens[[123]]
 review.tokens.dfm <- dfm(review.tokens, tolower = FALSE)
 #Prebacivanje DFM u matricu
 #review.tokens.matrix <- as.matrix(review.tokens.dfm)
-View(review.tokens.dfm[1:20, 1:100])
 dim(review.tokens.dfm)
 review.tokens.dfm
 
@@ -144,28 +142,58 @@ review.tokens.dfm.tfidf <- dfm_tfidf(review.tokens.dfm, scheme_tf = "prop",
                                    scheme_df = "inverse", base = 10)
 dim(review.tokens.dfm.tfidf)
 
+#PROVERA NORMALNOSTI VARIJBLI DATASET-a
+
+#install.packages('nortest')
+library(nortest)
+dataframe <- as.data.frame(review.tokens.dfm.tfidf)
+kolone <- floor(runif(10, min=1, ncol(dataframe)))
+for (i in kolone){
+  print(ad.test(dataframe[,i]))
+}
+#Slucajnim uzorcima iz dataframe-a vidimo da varijable ne podlezu Normalnoj raspodeli
+
+
+#########################################################
+#DISKRETIZACIJA DATASET-OVA
+#########################################################
+#The Binarized Multinomial Naive Bayes is used when the frequencies of the words
+#don’t play a key role in our classification. Such an example is Sentiment Analysis,
+#where it does not really matter how many times someone mentions the word “bad” but rather
+#only the fact that he does.
+#izvor: http://blog.datumbox.com/machine-learning-tutorial-the-naive-bayes-text-classifier/
+#Boolean feature (Binarized) Multinomial Naive Bayes
+#Function to convert the word frequencies to yes and no labels
+convert_counts <- function(x) {
+  x <- as.factor(ifelse(x > 0, "Yes", "No"))
+}
+
 #Vektor sa ukupnim tf-idf skorovima za svaki unigram 
 total.tfidf.scores.unigram <- as.vector(colSums(review.tokens.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.unigram, 0.97) #proba sa 97. percentilom
-percentil90 <- quantile(total.tfidf.scores.unigram, 0.99) #proba sa 99. percentilom
-
-review.tokens.dfm.tfidf.df <- convert(review.tokens.dfm.tfidf, to="data.frame")
-review.tokens.dfm.tfidf.df <- cbind(Label = ecommerce_reviews$Label,review.tokens.dfm.tfidf.df)
-#Prikaz prvih 25 dokumenata TF-IDF matrice sa labelama
-review.tokens.dfm.tfidf.df[1:25,1:4]
+percentil75 <- quantile(total.tfidf.scores.unigram, 0.99) #proba sa 99. percentilom
+percentil90 <- quantile(total.tfidf.scores.unigram, 0.995) #proba sa 995. percentilom
 
 #UNIGRAMI sa total TF-IDF skorom > 75 percentila
-unigram.index.removals.75 <- which(total.tfidf.scores.unigram < percentil75)+2 #dodajem +2 zbog prve dve nove kolone
-unigrams.tfidf.75 <- review.tokens.dfm.tfidf.df[,-unigram.index.removals.75]
+unigram.index.removals.75 <- which(total.tfidf.scores.unigram < percentil75)
+unigrams.tfidf.75 <- dfm_select(review.tokens.dfm.tfidf, pattern = colnames(review.tokens.dfm.tfidf)[unigram.index.removals.75],
+                               selection = "remove")
+unigrams.tfidf.75 <- apply(unigrams.tfidf.75, MARGIN = 2, convert_counts)
+unigrams.tfidf.75 <- as.data.frame(unigrams.tfidf.75) 
+unigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,unigrams.tfidf.75)
+
 
 #UNIGRAMI sa total TF-IDF skorom > 90 percentila
-unigram.index.removals.90 <- which(total.tfidf.scores.unigram < percentil90)+2 #dodajem +2 zbog prve dve nove kolone
-unigrams.tfidf.90 <- review.tokens.dfm.tfidf.df[,-unigram.index.removals.90]
+unigram.index.removals.90 <- which(total.tfidf.scores.unigram < percentil90)
+unigrams.tfidf.90 <- dfm_select(review.tokens.dfm.tfidf, pattern = colnames(review.tokens.dfm.tfidf)[unigram.index.removals.90],
+                                selection = "remove")
+unigrams.tfidf.90 <- apply(unigrams.tfidf.90, MARGIN = 2, convert_counts)
+unigrams.tfidf.90 <- as.data.frame(unigrams.tfidf.90) 
+unigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,unigrams.tfidf.90)
 
-unigrams.tfidf.90[1:5,1:5]
-unigrams.tfidf.75[1:5,1:5]
+dim(unigrams.tfidf.75)
+dim(unigrams.tfidf.90)
 
 
 ##############################
@@ -180,7 +208,6 @@ bigrams[[123]]
 #Kreiramo DFM od bigrama
 review.bigrams.dfm <- dfm(bigrams, tolower = FALSE)
 
-View(review.bigrams.dfm[1:20, 1:50])
 dim(review.bigrams.dfm)
 review.bigrams.dfm
 
@@ -193,27 +220,28 @@ dim(review.bigrams.dfm.tfidf)
 total.tfidf.scores.bigram <- as.vector(colSums(review.bigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.bigram, 0.97) #proba sa 97. percentilom
-percentil90 <- quantile(total.tfidf.scores.bigram, 0.99) #proba sa 99. percentilom
+percentil75 <- quantile(total.tfidf.scores.bigram, 0.99) #proba sa 97. percentilom
+percentil90 <- quantile(total.tfidf.scores.bigram, 0.995) #proba sa 99. percentilom
 
 #BIGRAMI sa total TF-IDF skorom > 75 percentila
 bigram.index.removals.75 <- which(total.tfidf.scores.bigram < percentil75)
 bigrams.tfidf.75 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.75],
                                selection = "remove")
-bigrams.tfidf.75 <- convert(bigrams.tfidf.75, to = "data.frame") #uspesno sa 97.percentilom
-#Dodajemo labelu 
-bigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label, bigrams.tfidf.75)
-bigrams.tfidf.75[1:5,1:5]
+bigrams.tfidf.75 <- apply(bigrams.tfidf.75, MARGIN = 2, convert_counts)
+bigrams.tfidf.75 <- as.data.frame(bigrams.tfidf.75) 
+bigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,bigrams.tfidf.75)
+
+dim(bigrams.tfidf.75)
 
 #BIGRAMI sa total TF-IDF skorom > 90 percentila
 bigram.index.removals.90 <- which(total.tfidf.scores.bigram < percentil90)
 bigrams.tfidf.90 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.90],
                                selection = "remove")
-bigrams.tfidf.90 <- convert(bigrams.tfidf.90, to = "data.frame") #uspesno sa 99. percentilom
-#Dodajemo labelu 
-bigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label, bigrams.tfidf.90)
-bigrams.tfidf.90[1:5,1:5]
+bigrams.tfidf.90 <- apply(bigrams.tfidf.90, MARGIN = 2, convert_counts)
+bigrams.tfidf.90 <- as.data.frame(bigrams.tfidf.90) 
+bigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,bigrams.tfidf.90)
 
+dim(bigrams.tfidf.90)
 
 ##############################
 #Kreiramo trigrame
@@ -227,7 +255,6 @@ trigrams[[123]]
 #Kreiramo DFM od trigrama
 review.trigrams.dfm <- dfm(trigrams, tolower = FALSE)
 
-View(review.trigrams.dfm[1:20, 1:50])
 dim(review.trigrams.dfm)
 review.trigrams.dfm
 
@@ -240,30 +267,33 @@ dim(review.trigrams.dfm.tfidf)
 total.tfidf.scores.trigram <- as.vector(colSums(review.trigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.trigram, 0.97) #proba sa 97. percentilom
-percentil90 <- quantile(total.tfidf.scores.trigram, 0.99) #proba sa 99. percentilom
+percentil75 <- quantile(total.tfidf.scores.trigram, 0.99) #proba sa 97. percentilom
+percentil90 <- quantile(total.tfidf.scores.trigram, 0.995) #proba sa 99. percentilom
 
 #TRIGRAMI sa total TF-IDF skorom > 75 percentila
 trigram.index.removals.75 <- which(total.tfidf.scores.trigram < percentil75)
 trigrams.tfidf.75 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.75],
                                selection = "remove")
+trigrams.tfidf.75 <- apply(trigrams.tfidf.75, MARGIN = 2, convert_counts)
+trigrams.tfidf.75 <- as.data.frame(trigrams.tfidf.75) 
+trigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,trigrams.tfidf.75)
 
-trigrams.tfidf.75 <- convert(trigrams.tfidf.75, to = "data.frame") #uspesno sa 97. percentilom
-#Dodajemo labelu 
-trigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label, trigrams.tfidf.75)
-trigrams.tfidf.75[1:5,1:5]
+dim(trigrams.tfidf.75)
 
 #TRIGRAMI sa total TF-IDF skorom > 90 percentila
 trigram.index.removals.90 <- which(total.tfidf.scores.trigram < percentil90)
 trigrams.tfidf.90 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.90],
                                selection = "remove")
 
-trigrams.tfidf.90 <- convert(trigrams.tfidf.90, to = "data.frame") #uspesno sa 99. percentilom
-#Dodajemo labelu 
-trigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label, trigrams.tfidf.90)
-trigrams.tfidf.90[1:5,1:5]
+trigrams.tfidf.90 <- apply(trigrams.tfidf.90, MARGIN = 2, convert_counts)
+trigrams.tfidf.90 <- as.data.frame(trigrams.tfidf.90) 
+trigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,trigrams.tfidf.90)
 
+dim(trigrams.tfidf.90)
 
+########################################################################
+# KONFIGURACIJE
+########################################################################
 
 #install.packages(c("dplyr","DMwR","purr"))
 library(dplyr) # for data manipulation
@@ -295,32 +325,24 @@ ctrl <- trainControl(method = "repeatedcv",
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
 set.seed(5627)
-
 orig_fit <- train(Label ~ .,
-                  data = train1,
-                  method = "svmLinear2",
-                  verbose = FALSE,
-                  preProcess = c("center", "scale"),
-                  metric = "ROC",
-                  trControl = ctrl)
-#Ovde daje warning da dosta varijabli ima zero variance. 
+                   data = train1,
+                   method = "naive_bayes",
+                   verbose = FALSE,
+                   metric = "ROC",
+                   trControl = trainControl(method="none", classProbs = TRUE),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
 
 # Build custom AUC function to extract AUC
 # from the caret model object
-
-test_roc <- function(model, data) {
-  
-  roc(data$Label,
-      predict(model, data, type = "prob")[, "NEG"])
-  
-}
 
 orig_fit %>%
   test_roc(data = test1) %>%
@@ -335,12 +357,14 @@ ctrl$seeds <- orig_fit$control$seeds
 ctrl$sampling <- "down"
 
 down_fit <- train(Label ~ .,
-                  data = train1,
-                  method = "svmLinear2",
-                  verbose = FALSE,
-                  preProcess = c("center", "scale"),
-                  metric = "ROC",
-                  trControl = ctrl)
+                   data = train1,
+                   method = "naive_bayes",
+                   verbose = FALSE,
+                   metric = "ROC",
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 
 # Build smote model
@@ -348,24 +372,27 @@ down_fit <- train(Label ~ .,
 ctrl$sampling <- "smote"
 
 smote_fit <- train(Label ~ .,
-                   data = train1,
-                   method = "svmLinear2",
-                   verbose = FALSE,    
-                   preProcess = c("center", "scale"),
-                   metric = "ROC",
-                   trControl = ctrl)
+                    data = train1,
+                    method = "naive_bayes",
+                    verbose = FALSE,
+                    metric = "ROC",
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 # Examine results for test set
 
 model_list <- list(original = orig_fit,
-                   down = down_fit,
-                   SMOTE = smote_fit)
+                    down = down_fit,
+                    SMOTE = smote_fit)
 
 model_list_roc <- model_list %>%
   map(test_roc, data = test1)
 
 model_list_roc %>%
   map(auc)
+
 
 
 ########################################################################
@@ -385,22 +412,25 @@ ctrl2 <- trainControl(method = "repeatedcv",
                       verboseIter = TRUE,
                       summaryFunction = twoClassSummary,
                       classProbs = TRUE)
-
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+#install.packages("naivebayes")
+library(naivebayes)
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
-set.seed(1010)
-
+set.seed(5627)
 orig_fit2 <- train(Label ~ .,
                    data = train2,
-                   method = "svmLinear2",
+                   method = "naive_bayes",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl2)
+                   trControl = trainControl(method="none", classProbs = TRUE),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace =1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
+
+# Build custom AUC function to extract AUC
+# from the caret model object
 
 orig_fit2 %>%
   test_roc(data = test2) %>%
@@ -416,11 +446,13 @@ ctrl2$sampling <- "down"
 
 down_fit2 <- train(Label ~ .,
                    data = train2,
-                   method = "svmLinear2",
+                   method = "naive_bayes",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl2)
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit2$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 
 # Build smote model
@@ -429,11 +461,13 @@ ctrl2$sampling <- "smote"
 
 smote_fit2 <- train(Label ~ .,
                     data = train2,
-                    method = "svmLinear2",
-                    verbose = FALSE,    
-                    preProcess = c("center", "scale"),
+                    method = "naive_bayes",
+                    verbose = FALSE,
                     metric = "ROC",
-                    trControl = ctrl2)
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit2$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -446,6 +480,7 @@ model_list_roc2 <- model_list2 %>%
 
 model_list_roc2 %>%
   map(auc)
+
 
 
 ########################################################################
@@ -466,21 +501,27 @@ ctrl3 <- trainControl(method = "repeatedcv",
                       summaryFunction = twoClassSummary,
                       classProbs = TRUE)
 
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
-set.seed(1001)
-
+set.seed(5627)
 orig_fit3 <- train(Label ~ .,
                    data = train3,
-                   method = "svmLinear2",
+                   method = "naive_bayes",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl3)
+                   trControl = trainControl(method="none", classProbs = TRUE),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace =1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
+
+# Build custom AUC function to extract AUC
+# from the caret model object
+
+orig_fit3 %>%
+  test_roc(data = test3) %>%
+  auc()
 
 # Use the same seed to ensure same cross-validation splits
 
@@ -488,15 +529,17 @@ ctrl3$seeds <- orig_fit3$control$seeds
 
 # Build down-sampled model
 
-ctrl3$sampling <- "down"
+ctrl2$sampling <- "down"
 
 down_fit3 <- train(Label ~ .,
                    data = train3,
-                   method = "svmLinear2",
+                   method = "naive_bayes",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl3)
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit3$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 
 # Build smote model
@@ -505,11 +548,13 @@ ctrl3$sampling <- "smote"
 
 smote_fit3 <- train(Label ~ .,
                     data = train3,
-                    method = "svmLinear2",
-                    verbose = FALSE,    
-                    preProcess = c("center", "scale"),
+                    method = "naive_bayes",
+                    verbose = FALSE,
                     metric = "ROC",
-                    trControl = ctrl3)
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit3$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -534,12 +579,6 @@ train4 <- unigrams.tfidf.90[train.indexes4,]
 test4 <- unigrams.tfidf.90[-train.indexes4,]
 prop.table(table(test4$Label))
 
-# Kontrolna funkcija za 10fold cross-validation
-#install.packages("doSNOW")
-library(e1071)
-library(doSNOW)
-
-
 ctrl4 <- trainControl(method = "repeatedcv",
                      number = 10,
                      repeats = 2,
@@ -547,18 +586,17 @@ ctrl4 <- trainControl(method = "repeatedcv",
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
 set.seed(5627)
-
 orig_fit4 <- train(Label ~ .,
                   data = train4,
-                  method = "svmLinear2",
+                  method = "nb",
                   verbose = FALSE,
-                  preProcess = c("center", "scale"),
                   metric = "ROC",
-                  trControl = ctrl4)
+                  trControl = trainControl(method="none", classProbs = TRUE),
+                  tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
@@ -579,12 +617,14 @@ ctrl4$seeds <- orig_fit4$control$seeds
 ctrl4$sampling <- "down"
 
 down_fit4 <- train(Label ~ .,
-                  data = train4,
-                  method = "svmLinear2",
-                  verbose = FALSE,
-                  preProcess = c("center", "scale"),
-                  metric = "ROC",
-                  trControl = ctrl4)
+                   data = train4,
+                   method = "nb",
+                   verbose = FALSE,
+                   metric = "ROC",
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit4$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 
 # Build smote model
@@ -592,12 +632,14 @@ down_fit4 <- train(Label ~ .,
 ctrl4$sampling <- "smote"
 
 smote_fit4 <- train(Label ~ .,
-                   data = train4,
-                   method = "svmLinear2",
-                   verbose = FALSE,    
-                   preProcess = c("center", "scale"),
-                   metric = "ROC",
-                   trControl = ctrl4)
+                    data = train4,
+                    method = "nb",
+                    verbose = FALSE,
+                    metric = "ROC",
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit4$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 # Examine results for test set
 
@@ -630,21 +672,23 @@ ctrl5 <- trainControl(method = "repeatedcv",
                       summaryFunction = twoClassSummary,
                       classProbs = TRUE)
 
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
-set.seed(1010)
-
+set.seed(5627)
 orig_fit5 <- train(Label ~ .,
                    data = train5,
-                   method = "svmLinear2",
+                   method = "nb",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl5)
+                   trControl = trainControl(method="none", classProbs = TRUE),
+                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
+
+# Build custom AUC function to extract AUC
+# from the caret model object
 
 orig_fit5 %>%
   test_roc(data = test5) %>%
@@ -660,11 +704,13 @@ ctrl5$sampling <- "down"
 
 down_fit5 <- train(Label ~ .,
                    data = train5,
-                   method = "svmLinear2",
+                   method = "nb",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl5)
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit5$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 
 # Build smote model
@@ -673,11 +719,13 @@ ctrl5$sampling <- "smote"
 
 smote_fit5 <- train(Label ~ .,
                     data = train5,
-                    method = "svmLinear2",
-                    verbose = FALSE,    
-                    preProcess = c("center", "scale"),
+                    method = "nb",
+                    verbose = FALSE,
                     metric = "ROC",
-                    trControl = ctrl5)
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit5$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 # Examine results for test set
 
@@ -690,7 +738,6 @@ model_list_roc5 <- model_list5 %>%
 
 model_list_roc5 %>%
   map(auc)
-
 
 ########################################################################
 # KONFIGURACIJA 6 sa podkonfiguracijama original, down-sampling i SMOTE 
@@ -710,21 +757,27 @@ ctrl6 <- trainControl(method = "repeatedcv",
                       summaryFunction = twoClassSummary,
                       classProbs = TRUE)
 
-# Treniramo trening set koriscenjem SVM Linear kernel metode
+# Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
-set.seed(1001)
-
+set.seed(5627)
 orig_fit6 <- train(Label ~ .,
                    data = train6,
-                   method = "svmLinear2",
+                   method = "nb",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl6)
+                   trControl = trainControl(method="none", classProbs = TRUE),
+                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
+
+# Build custom AUC function to extract AUC
+# from the caret model object
+
+orig_fit6 %>%
+  test_roc(data = test6) %>%
+  auc()
 
 # Use the same seed to ensure same cross-validation splits
 
@@ -736,11 +789,13 @@ ctrl6$sampling <- "down"
 
 down_fit6 <- train(Label ~ .,
                    data = train6,
-                   method = "svmLinear2",
+                   method = "nb",
                    verbose = FALSE,
-                   preProcess = c("center", "scale"),
                    metric = "ROC",
-                   trControl = ctrl6)
+                   trControl = trainControl(method="none", classProbs = TRUE, 
+                                            seeds = orig_fit6$control$seeds,
+                                            sampling = "down"),
+                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 
 # Build smote model
@@ -749,11 +804,13 @@ ctrl6$sampling <- "smote"
 
 smote_fit6 <- train(Label ~ .,
                     data = train6,
-                    method = "svmLinear2",
-                    verbose = FALSE,    
-                    preProcess = c("center", "scale"),
+                    method = "nb",
+                    verbose = FALSE,
                     metric = "ROC",
-                    trControl = ctrl6)
+                    trControl = trainControl(method="none", classProbs = TRUE, 
+                                             seeds = orig_fit6$control$seeds,
+                                             sampling = "smote"),
+                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
 
 # Examine results for test set
 

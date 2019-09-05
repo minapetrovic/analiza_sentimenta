@@ -1,8 +1,24 @@
 #install.packages("tm")
 #install.packages("tidyr") #koriscena fja unite
+#install.packages('nortest')
+#install.packages(c("dplyr","DMwR","purr"))
+#install.packages("doSNOW")
+#install.packages("naivebayes")
 library(tm)
 library(tidyr)
 library(ggplot2)
+library(SnowballC)
+library(quanteda)
+library(nortest)
+library(dplyr) # for data manipulation
+library(caret) # for model-building
+library(DMwR) # for smote implementation
+library(purrr) # for functional programming (map)
+library(pROC) # for AUC calculations
+library(e1071)
+library(doSNOW)
+library(naivebayes)
+library(klaR)
 
 #Ucitavanje dataseta
 ecommerce_reviews <- read.csv("e-commerce_reviews.csv", stringsAsFactors = FALSE)
@@ -103,14 +119,12 @@ corpus_review <- tm_map(corpus_review, stripWhitespace)
 
 # 6. Stemovanje reci
 #install.packages('SnowballC')
-library(SnowballC)
 corpus_review <- tm_map(corpus_review , stemDocument, language = "english")
 
 #####################################################
 #KREIRANJE DTM, TF-IDF za unigrame, bigrame, trigrame
 #####################################################
 
-library(quanteda)
 if (requireNamespace("tm", quietly = TRUE)) {
   qCorpus <- corpus(corpus_review)
 }
@@ -144,9 +158,7 @@ dim(review.tokens.dfm.tfidf)
 
 #PROVERA NORMALNOSTI VARIJBLI DATASET-a
 
-#install.packages('nortest')
-library(nortest)
-dataframe <- as.data.frame(review.tokens.dfm.tfidf)
+dataframe <- convert(review.tokens.dfm.tfidf, to = "data.frame")
 kolone <- floor(runif(10, min=1, ncol(dataframe)))
 for (i in kolone){
   print(ad.test(dataframe[,i]))
@@ -163,9 +175,11 @@ for (i in kolone){
 #only the fact that he does.
 #izvor: http://blog.datumbox.com/machine-learning-tutorial-the-naive-bayes-text-classifier/
 #Boolean feature (Binarized) Multinomial Naive Bayes
-#Function to convert the word frequencies to yes and no labels
-convert_counts <- function(x) {
-  x <- as.factor(ifelse(x > 0, "Yes", "No"))
+# Function to convert the word frequencies to yes (presence) and no (absence) labels
+convert_count <- function(x) {
+  y <- ifelse(x > 0, 1,0)
+  y <- factor(y, levels=c(0,1), labels=c("No", "Yes"))
+  y
 }
 
 #Vektor sa ukupnim tf-idf skorovima za svaki unigram 
@@ -179,16 +193,18 @@ percentil90 <- quantile(total.tfidf.scores.unigram, 0.995) #proba sa 995. percen
 unigram.index.removals.75 <- which(total.tfidf.scores.unigram < percentil75)
 unigrams.tfidf.75 <- dfm_select(review.tokens.dfm.tfidf, pattern = colnames(review.tokens.dfm.tfidf)[unigram.index.removals.75],
                                selection = "remove")
-unigrams.tfidf.75 <- apply(unigrams.tfidf.75, MARGIN = 2, convert_counts)
+unigrams.tfidf.75 <- apply(unigrams.tfidf.75, MARGIN = 2, convert_count)
 unigrams.tfidf.75 <- as.data.frame(unigrams.tfidf.75) 
 unigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,unigrams.tfidf.75)
-
+#discretized <- discretize(data = unigrams.tfidf.75[,2:ncol(unigrams.tfidf.75)])
+#prilikom klasicne diskretizacije prijavljuje Error in check.data(data) : the data set contains NaN/NA values.
+#ali dataframe nema NA vrednosti
 
 #UNIGRAMI sa total TF-IDF skorom > 90 percentila
 unigram.index.removals.90 <- which(total.tfidf.scores.unigram < percentil90)
 unigrams.tfidf.90 <- dfm_select(review.tokens.dfm.tfidf, pattern = colnames(review.tokens.dfm.tfidf)[unigram.index.removals.90],
                                 selection = "remove")
-unigrams.tfidf.90 <- apply(unigrams.tfidf.90, MARGIN = 2, convert_counts)
+unigrams.tfidf.90 <- apply(unigrams.tfidf.90, MARGIN = 2, convert_count)
 unigrams.tfidf.90 <- as.data.frame(unigrams.tfidf.90) 
 unigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,unigrams.tfidf.90)
 
@@ -199,9 +215,6 @@ dim(unigrams.tfidf.90)
 ##############################
 #Kreiramo bigrame
 ##############################
-
-
-
 bigrams <- tokens_ngrams(review.tokens, n = 2:2)
 #Prikaz bigrama 123. dokumenta
 bigrams[[123]]
@@ -220,14 +233,14 @@ dim(review.bigrams.dfm.tfidf)
 total.tfidf.scores.bigram <- as.vector(colSums(review.bigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.bigram, 0.99) #proba sa 97. percentilom
-percentil90 <- quantile(total.tfidf.scores.bigram, 0.995) #proba sa 99. percentilom
+percentil75 <- quantile(total.tfidf.scores.bigram, 0.99) #proba sa 99. percentilom
+percentil90 <- quantile(total.tfidf.scores.bigram, 0.995) #proba sa 99,5. percentilom
 
 #BIGRAMI sa total TF-IDF skorom > 75 percentila
 bigram.index.removals.75 <- which(total.tfidf.scores.bigram < percentil75)
 bigrams.tfidf.75 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.75],
                                selection = "remove")
-bigrams.tfidf.75 <- apply(bigrams.tfidf.75, MARGIN = 2, convert_counts)
+bigrams.tfidf.75 <- apply(bigrams.tfidf.75, MARGIN = 2, convert_count)
 bigrams.tfidf.75 <- as.data.frame(bigrams.tfidf.75) 
 bigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,bigrams.tfidf.75)
 
@@ -237,7 +250,7 @@ dim(bigrams.tfidf.75)
 bigram.index.removals.90 <- which(total.tfidf.scores.bigram < percentil90)
 bigrams.tfidf.90 <- dfm_select(review.bigrams.dfm.tfidf, pattern = colnames(review.bigrams.dfm.tfidf)[bigram.index.removals.90],
                                selection = "remove")
-bigrams.tfidf.90 <- apply(bigrams.tfidf.90, MARGIN = 2, convert_counts)
+bigrams.tfidf.90 <- apply(bigrams.tfidf.90, MARGIN = 2, convert_count)
 bigrams.tfidf.90 <- as.data.frame(bigrams.tfidf.90) 
 bigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,bigrams.tfidf.90)
 
@@ -247,14 +260,11 @@ dim(bigrams.tfidf.90)
 #Kreiramo trigrame
 ##############################
 
-
-
 trigrams <- tokens_ngrams(review.tokens, n = 3:3)
 #Prikaz trigrama 123. dokumenta
 trigrams[[123]]
 #Kreiramo DFM od trigrama
 review.trigrams.dfm <- dfm(trigrams, tolower = FALSE)
-
 dim(review.trigrams.dfm)
 review.trigrams.dfm
 
@@ -267,14 +277,14 @@ dim(review.trigrams.dfm.tfidf)
 total.tfidf.scores.trigram <- as.vector(colSums(review.trigrams.dfm.tfidf))
 
 #75. i 90. percentil
-percentil75 <- quantile(total.tfidf.scores.trigram, 0.99) #proba sa 97. percentilom
-percentil90 <- quantile(total.tfidf.scores.trigram, 0.995) #proba sa 99. percentilom
+percentil75 <- quantile(total.tfidf.scores.trigram, 0.99) #proba sa 99. percentilom
+percentil90 <- quantile(total.tfidf.scores.trigram, 0.995) #proba sa 99,5. percentilom
 
 #TRIGRAMI sa total TF-IDF skorom > 75 percentila
 trigram.index.removals.75 <- which(total.tfidf.scores.trigram < percentil75)
 trigrams.tfidf.75 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.75],
                                selection = "remove")
-trigrams.tfidf.75 <- apply(trigrams.tfidf.75, MARGIN = 2, convert_counts)
+trigrams.tfidf.75 <- apply(trigrams.tfidf.75, MARGIN = 2, convert_count)
 trigrams.tfidf.75 <- as.data.frame(trigrams.tfidf.75) 
 trigrams.tfidf.75 <- cbind(Label = ecommerce_reviews$Label,trigrams.tfidf.75)
 
@@ -284,8 +294,7 @@ dim(trigrams.tfidf.75)
 trigram.index.removals.90 <- which(total.tfidf.scores.trigram < percentil90)
 trigrams.tfidf.90 <- dfm_select(review.trigrams.dfm.tfidf, pattern = colnames(review.trigrams.dfm.tfidf)[trigram.index.removals.90],
                                selection = "remove")
-
-trigrams.tfidf.90 <- apply(trigrams.tfidf.90, MARGIN = 2, convert_counts)
+trigrams.tfidf.90 <- apply(trigrams.tfidf.90, MARGIN = 2, convert_count)
 trigrams.tfidf.90 <- as.data.frame(trigrams.tfidf.90) 
 trigrams.tfidf.90 <- cbind(Label = ecommerce_reviews$Label,trigrams.tfidf.90)
 
@@ -295,12 +304,6 @@ dim(trigrams.tfidf.90)
 # KONFIGURACIJE
 ########################################################################
 
-#install.packages(c("dplyr","DMwR","purr"))
-library(dplyr) # for data manipulation
-library(caret) # for model-building
-library(DMwR) # for smote implementation
-library(purrr) # for functional programming (map)
-library(pROC) # for AUC calculations
 
 ########################################################################
 # KONFIGURACIJA 1 sa podkonfiguracijama original, down-sampling i SMOTE 
@@ -313,10 +316,6 @@ test1 <- unigrams.tfidf.75[-train.indexes,]
 prop.table(table(test1$Label))
 
 # Kontrolna funkcija za 10fold cross-validation
-#install.packages("doSNOW")
-library(e1071)
-library(doSNOW)
-
 
 ctrl <- trainControl(method = "repeatedcv",
                      number = 10,
@@ -332,17 +331,21 @@ start.time <- Sys.time()
 set.seed(5627)
 orig_fit <- train(Label ~ .,
                    data = train1,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                   trControl = ctrl,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
 
 # Build custom AUC function to extract AUC
 # from the caret model object
+test_roc <- function(model, data) {
+  roc(data$Label,
+      predict(model, data, type = "prob")[, "NEG"])
+}
 
 orig_fit %>%
   test_roc(data = test1) %>%
@@ -358,13 +361,11 @@ ctrl$sampling <- "down"
 
 down_fit <- train(Label ~ .,
                    data = train1,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                   trControl = ctrl,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -373,13 +374,11 @@ ctrl$sampling <- "smote"
 
 smote_fit <- train(Label ~ .,
                     data = train1,
-                    method = "naive_bayes",
+                    method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                    trControl = ctrl,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -393,6 +392,31 @@ model_list_roc <- model_list %>%
 model_list_roc %>%
   map(auc)
 
+results_list_roc <- list(NA)
+num_mod <- 1
+
+for(the_roc in model_list_roc){
+  
+  results_list_roc[[num_mod]] <- 
+    tibble(tpr = the_roc$sensitivities,
+               fpr = 1 - the_roc$specificities,
+               model = names(model_list)[num_mod])
+  
+  num_mod <- num_mod + 1
+  
+}
+
+results_df_roc <- bind_rows(results_list_roc)
+
+# Plot ROC curve for all 3 models
+
+custom_col <- c("#000000", "#009E73", "#0072B2")
+
+ggplot(aes(x = fpr,  y = tpr, group = model), data = results_df_roc) +
+  geom_line(aes(color = model), size = 1) +
+  scale_color_manual(values = custom_col) +
+  geom_abline(intercept = 0, slope = 1, color = "gray", size = 1) +
+  theme_bw(base_size = 18)
 
 
 ########################################################################
@@ -412,25 +436,21 @@ ctrl2 <- trainControl(method = "repeatedcv",
                       verboseIter = TRUE,
                       summaryFunction = twoClassSummary,
                       classProbs = TRUE)
-#install.packages("naivebayes")
-library(naivebayes)
+
 # Treniramo trening set koriscenjem Naive Bayes metode
 start.time <- Sys.time()
 
 set.seed(5627)
 orig_fit2 <- train(Label ~ .,
                    data = train2,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace =1,adjust=FALSE))
+                   trControl = ctrl2,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
-
-# Build custom AUC function to extract AUC
-# from the caret model object
 
 orig_fit2 %>%
   test_roc(data = test2) %>%
@@ -446,13 +466,11 @@ ctrl2$sampling <- "down"
 
 down_fit2 <- train(Label ~ .,
                    data = train2,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit2$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                   trControl = ctrl2,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -461,13 +479,11 @@ ctrl2$sampling <- "smote"
 
 smote_fit2 <- train(Label ~ .,
                     data = train2,
-                    method = "naive_bayes",
+                    method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit2$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                    trControl = ctrl2,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -507,17 +523,14 @@ start.time <- Sys.time()
 set.seed(5627)
 orig_fit3 <- train(Label ~ .,
                    data = train3,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace =1,adjust=FALSE))
+                   trControl = ctrl3,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
-
-# Build custom AUC function to extract AUC
-# from the caret model object
 
 orig_fit3 %>%
   test_roc(data = test3) %>%
@@ -533,13 +546,11 @@ ctrl2$sampling <- "down"
 
 down_fit3 <- train(Label ~ .,
                    data = train3,
-                   method = "naive_bayes",
+                   method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit3$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                   trControl = ctrl3,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -548,13 +559,11 @@ ctrl3$sampling <- "smote"
 
 smote_fit3 <- train(Label ~ .,
                     data = train3,
-                    method = "naive_bayes",
+                    method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit3$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,laplace=1,adjust=FALSE))
+                    trControl = ctrl3,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -595,14 +604,11 @@ orig_fit4 <- train(Label ~ .,
                   method = "nb",
                   verbose = FALSE,
                   metric = "ROC",
-                  trControl = trainControl(method="none", classProbs = TRUE),
-                  tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                  trControl = ctrl4,
+                  tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
-
-# Build custom AUC function to extract AUC
-# from the caret model object
 
 orig_fit4 %>%
   test_roc(data = test4) %>%
@@ -621,10 +627,8 @@ down_fit4 <- train(Label ~ .,
                    method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit4$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                   trControl = ctrl4,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -636,10 +640,8 @@ smote_fit4 <- train(Label ~ .,
                     method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit4$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                    trControl = ctrl4,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -681,14 +683,11 @@ orig_fit5 <- train(Label ~ .,
                    method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE),
-                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                   trControl = ctrl5,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
-
-# Build custom AUC function to extract AUC
-# from the caret model object
 
 orig_fit5 %>%
   test_roc(data = test5) %>%
@@ -707,10 +706,8 @@ down_fit5 <- train(Label ~ .,
                    method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit5$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                   trControl = ctrl5,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -722,10 +719,8 @@ smote_fit5 <- train(Label ~ .,
                     method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit5$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                    trControl = ctrl5,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 
@@ -766,14 +761,11 @@ orig_fit6 <- train(Label ~ .,
                    method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE),
-                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                   trControl = ctrl6,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 total.time <- Sys.time() - start.time
 total.time
-
-# Build custom AUC function to extract AUC
-# from the caret model object
 
 orig_fit6 %>%
   test_roc(data = test6) %>%
@@ -792,10 +784,8 @@ down_fit6 <- train(Label ~ .,
                    method = "nb",
                    verbose = FALSE,
                    metric = "ROC",
-                   trControl = trainControl(method="none", classProbs = TRUE, 
-                                            seeds = orig_fit6$control$seeds,
-                                            sampling = "down"),
-                   tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                   trControl = ctrl6,
+                   tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 
 # Build smote model
@@ -807,10 +797,8 @@ smote_fit6 <- train(Label ~ .,
                     method = "nb",
                     verbose = FALSE,
                     metric = "ROC",
-                    trControl = trainControl(method="none", classProbs = TRUE, 
-                                             seeds = orig_fit6$control$seeds,
-                                             sampling = "smote"),
-                    tuneGrid = data.frame(usekernel=FALSE,fL=0,adjust=FALSE))
+                    trControl = ctrl6,
+                    tuneGrid = data.frame(usekernel=FALSE,fL=1,adjust=FALSE))
 
 # Examine results for test set
 

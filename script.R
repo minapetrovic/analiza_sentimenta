@@ -589,8 +589,8 @@ total.time
 
 # Examine results for test set
 
-model_list4 <- list(original = orig_fit4)#,
-#SMOTE = smote_fit4)
+model_list4 <- list(original = orig_fit4,
+                    SMOTE = smote_fit4)
 
 model_list_roc4 <- model_list4 %>%
   map(test_roc, data = test4)
@@ -598,16 +598,21 @@ model_list_roc4 <- model_list4 %>%
 model_list_roc4 %>%
   map(auc)
 
+#Najbolji model
+model_list_najbolji <- list(original = orig_fit4)
+
+model_list_roc_najbolji <- model_list_najbolji %>%
+  map(test_roc, data = test4)
+
 results_list_roc <- list(NA)
 num_mod <- 1
 
-for(the_roc in model_list_roc4){
+for(the_roc in model_list_roc_najbolji){
   
   results_list_roc[[num_mod]] <- 
     tibble(tpr = the_roc$sensitivities,
            fpr = 1 - the_roc$specificities,
-           model = names(model_list)[num_mod])
-  
+           model = names(model_list_najbolji)[num_mod])
   
 }
 
@@ -770,11 +775,11 @@ prop.table(table(test7$Label))
 # Kontrolna funkcija za 10fold cross-validation
 
 ctrl7 <- trainControl(method = "repeatedcv",
-                     number = 10,
-                     repeats = 2,
-                     verboseIter = TRUE,
-                     summaryFunction = twoClassSummary,
-                     classProbs = TRUE)
+                      number = 10,
+                      repeats = 2,
+                      verboseIter = TRUE,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
 
 
 # Treniramo trening set koriscenjem rpart metode
@@ -783,11 +788,11 @@ cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 set.seed(5627)
 orig_fit7 <- train(x = train7[,-1],
-                  y = train7$Label,
-                  method = "rpart",
-                  metric = "ROC",
-                  trControl = ctrl7,
-                  tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                   y = train7$Label,
+                   method = "rpart",
+                   metric = "ROC",
+                   trControl = ctrl7,
+                   tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
@@ -802,18 +807,18 @@ start.time <- Sys.time()
 cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 smote_fit7 <- train(x = train7[,-1],
-                   y = train7$Label,
-                   method = "rpart",
-                   metric = "ROC",
-                   trControl = ctrl7,
-                   tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                    y = train7$Label,
+                    method = "rpart",
+                    metric = "ROC",
+                    trControl = ctrl7,
+                    tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
 # Examine results for test set
 
 model_list7 <- list(original = orig_fit7,
-                   SMOTE = smote_fit7)
+                    SMOTE = smote_fit7)
 
 model_list_roc7 <- model_list7 %>%
   map(test_roc, data = test7)
@@ -1025,11 +1030,11 @@ prop.table(table(test11$Label))
 
 # Kontrolna funkcija za 10fold cross-validation
 ctrl11 <- trainControl(method = "repeatedcv",
-                      number = 10,
-                      repeats = 2,
-                      verboseIter = TRUE,
-                      summaryFunction = twoClassSummary,
-                      classProbs = TRUE)
+                       number = 10,
+                       repeats = 2,
+                       verboseIter = TRUE,
+                       summaryFunction = twoClassSummary,
+                       classProbs = TRUE)
 
 # Treniramo trening set koriscenjem rpart metode
 start.time <- Sys.time()
@@ -1037,11 +1042,11 @@ cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 set.seed(5627)
 orig_fit11 <- train(x = train11[,-1],
-                   y = train11$Label,
-                   method = "rpart",
-                   metric = "ROC",
-                   trControl = ctrl11,
-                   tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                    y = train11$Label,
+                    method = "rpart",
+                    metric = "ROC",
+                    trControl = ctrl11,
+                    tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
@@ -1057,11 +1062,11 @@ start.time <- Sys.time()
 cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 smote_fit11 <- train(x = train11[,-1],
-                    y = train11$Label,
-                    method = "rpart",
-                    metric = "ROC",
-                    trControl = ctrl11,
-                    tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                     y = train11$Label,
+                     method = "rpart",
+                     metric = "ROC",
+                     trControl = ctrl11,
+                     tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
@@ -1069,7 +1074,7 @@ total.time
 # Examine results for test set
 
 model_list11 <- list(original = orig_fit11,
-                    SMOTE = smote_fit11)
+                     SMOTE = smote_fit11)
 
 model_list_roc11 <- model_list11 %>%
   map(test_roc, data = test11)
@@ -1089,11 +1094,11 @@ prop.table(table(test12$Label))
 
 # Kontrolna funkcija za 10fold cross-validation
 ctrl12 <- trainControl(method = "repeatedcv",
-                      number = 10,
-                      repeats = 2,
-                      verboseIter = TRUE,
-                      summaryFunction = twoClassSummary,
-                      classProbs = TRUE)
+                       number = 10,
+                       repeats = 2,
+                       verboseIter = TRUE,
+                       summaryFunction = twoClassSummary,
+                       classProbs = TRUE)
 
 # Treniramo trening set koriscenjem rpart metode
 start.time <- Sys.time()
@@ -1101,11 +1106,11 @@ cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 set.seed(5627)
 orig_fit12 <- train(x = train12[,-1],
-                   y = train12$Label,
-                   method = "rpart",
-                   metric = "ROC",
-                   trControl = ctrl12,
-                   tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                    y = train12$Label,
+                    method = "rpart",
+                    metric = "ROC",
+                    trControl = ctrl12,
+                    tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
@@ -1121,22 +1126,21 @@ start.time <- Sys.time()
 cl <- makeCluster(7, type = "SOCK")
 registerDoSNOW(cl)
 smote_fit12 <- train(x = train12[,-1],
-                    y = train12$Label,
-                    method = "rpart",
-                    metric = "ROC",
-                    trControl = ctrl12,
-                    tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
+                     y = train12$Label,
+                     method = "rpart",
+                     metric = "ROC",
+                     trControl = ctrl12,
+                     tuneGrid = expand.grid(.cp=seq(0.001,0.5,0.001)))
 stopCluster(cl)
 total.time <- Sys.time() - start.time
 total.time
 # Examine results for test set
 
 model_list12 <- list(original = orig_fit12,
-                    SMOTE = smote_fit12)
+                     SMOTE = smote_fit12)
 
 model_list_roc12 <- model_list12 %>%
   map(test_roc, data = test12)
 
 model_list_roc12 %>%
   map(auc)
-
